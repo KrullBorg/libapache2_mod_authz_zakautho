@@ -113,6 +113,12 @@ check_authorization (request_rec *r,
 
 	zakautho_config *config;
 
+	xmlDocPtr xdoc;
+	xmlNodePtr xnode;
+
+	GError *error;
+	GdaConnection *gdacon;
+
 	if (!r->user)
 		{
 			return AUTHZ_DENIED_NO_USER;
@@ -139,9 +145,6 @@ check_authorization (request_rec *r,
 
 	if (config->xml_filename != NULL)
 		{
-			xmlDocPtr xdoc;
-			xmlNodePtr xnode;
-
 			xdoc = xmlParseFile (config->xml_filename);
 			if (xdoc != NULL)
 				{
@@ -162,9 +165,6 @@ check_authorization (request_rec *r,
 		}
 	else if (config->db_cnc_string != NULL)
 		{
-			GError *error;
-			GdaConnection *gdacon;
-
 			error = NULL;
 			gdacon = gda_connection_open_from_string (NULL, config->db_cnc_string, NULL, 0, &error);
 			if (gdacon == NULL || error != NULL)
@@ -183,6 +183,13 @@ check_authorization (request_rec *r,
 					               "Unable to load the libzakautho configuration from db.");
 					return AUTHZ_DENIED;
 				}
+		}
+	else
+		{
+			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+			               "libzakautho configuration must be loaded from xml file or from database. "
+			               "Please use AuthZakAuthoXmlFilename or AuthZakAuthoDbCncString in apache configuration.");
+			return AUTHZ_DENIED;
 		}
 
 	_user = g_strdup_printf (config->user_decoration != NULL ? config->user_decoration : "%s", r->user);
