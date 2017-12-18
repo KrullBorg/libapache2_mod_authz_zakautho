@@ -35,6 +35,8 @@ fi
 # Checks for libraries.
 PKG_CHECK_MODULES(MOD_AUTHZ_ZAKAUTHO, [apr-1
                                        apr-util-1
+                                       libxml-2.0
+                                       libgda-5.0
                                        libzakautho])
 
 AC_SUBST(MOD_AUTHZ_ZAKAUTHO_CFLAGS)
