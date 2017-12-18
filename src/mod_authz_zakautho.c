@@ -45,6 +45,7 @@ typedef struct {
 	char *db_table_name_prefix;
 	char *role_name_prefix;
 	char *resource_name_prefix;
+	char *user_decoration;
 } zakautho_config;
 
 static const command_rec authz_zakautho_cmds[] =
@@ -74,6 +75,11 @@ static const command_rec authz_zakautho_cmds[] =
 	               (void *)APR_OFFSETOF (zakautho_config, resource_name_prefix),
 	               OR_AUTHCFG,
 	               "Resource name prefix"),
+	AP_INIT_TAKE1 ("AuthZakAuthoUserDecoration",
+	               ap_set_string_slot,
+	               (void *)APR_OFFSETOF (zakautho_config, user_decoration),
+	               OR_AUTHCFG,
+	               "A string to convert the user name; the %s is replaced with the username"),
 	{NULL}
 };
 
@@ -97,26 +103,126 @@ check_authorization (request_rec *r,
 	const ap_expr_info_t *expr = parsed_require_args;
 	const char *require;
 
-	const char *t, *w;
+	const char *t;
+	const char *w;
 
-	if (!r->user) {
-		return AUTHZ_DENIED_NO_USER;
-	}
+	char *_user;
+
+	ZakAutho *autho;
+	ZakAuthoIRole *role_user;
+
+	zakautho_config *config;
+
+	if (!r->user)
+		{
+			return AUTHZ_DENIED_NO_USER;
+		}
 
 	require = ap_expr_str_exec (r, expr, &err);
-	if (err) {
-		ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
-		               "authz_user authorize: require user: Can't "
-		               "evaluate require expression: %s", err);
-		return AUTHZ_DENIED;
-	}
+	if (err)
+		{
+			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+			               "authz_zakautho authorize: require user: Can't "
+			               "evaluate require expression: %s", err);
+			return AUTHZ_DENIED;
+		}
+
+	config = (zakautho_config *)ap_get_module_config (r->per_dir_config, &authz_zakautho_module);
+
+	autho = zak_autho_new ();
+	if (autho == NULL)
+		{
+			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+			               "Unable to create the libzakautho object.");
+			return AUTHZ_DENIED;
+		}
+
+	if (config->xml_filename != NULL)
+		{
+			xmlDocPtr xdoc;
+			xmlNodePtr xnode;
+
+			xdoc = xmlParseFile (config->xml_filename);
+			if (xdoc != NULL)
+				{
+					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+					               "Unable to parse the libzakautho configuration from xml file «%s».",
+					               config->xml_filename);
+					return AUTHZ_DENIED;
+				}
+
+			xnode = xmlDocGetRootElement (xdoc);
+			if (!zak_autho_load_from_xml (autho, xnode, TRUE))
+				{
+					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+					               "Unable to load the libzakautho configuration from xml file «%s».",
+					               config->xml_filename);
+					return AUTHZ_DENIED;
+				}
+		}
+	else if (config->db_cnc_string != NULL)
+		{
+			GError *error;
+			GdaConnection *gdacon;
+
+			error = NULL;
+			gdacon = gda_connection_open_from_string (NULL, config->db_cnc_string, NULL, 0, &error);
+			if (gdacon == NULL || error != NULL)
+				{
+					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+					               "Unable to create connection to db: %s.",
+					               error != NULL && error->message != NULL ? error->message : "no details");
+					return AUTHZ_DENIED;
+				}
+
+			if (!zak_autho_load_from_db_with_monitor (autho, gdacon,
+			                                          config->db_table_name_prefix != NULL ? config->db_table_name_prefix : NULL,
+			                                          TRUE))
+				{
+					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+					               "Unable to load the libzakautho configuration from db.");
+					return AUTHZ_DENIED;
+				}
+		}
+
+	_user = g_strdup_printf (config->user_decoration != NULL ? config->user_decoration : "%s", r->user);
+	role_user = zak_autho_get_role_from_id (autho, _user);
+	if (role_user == NULL)
+		{
+			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+			               "User «%s» not found on libzakautho configuration.", _user);
+			return AUTHZ_DENIED;
+		}
+	g_free (_user);
+
+	if (config->role_name_prefix != NULL)
+		{
+			zak_autho_set_role_name_prefix (autho, config->role_name_prefix);
+		}
+	if (config->resource_name_prefix != NULL)
+		{
+			zak_autho_set_resource_name_prefix (autho, config->resource_name_prefix);
+		}
 
 	t = require;
-	while ((w = ap_getword_conf(r->pool, &t)) && w[0]) {
-		if (!strcmp(r->user, w)) {
-			return AUTHZ_GRANTED;
+	while ((w = ap_getword_conf (r->pool, &t)) && w[0])
+		{
+			ZakAuthoIResource *resource;
+
+			resource = zak_autho_get_resource_from_id (autho, w);
+			if (resource == NULL)
+				{
+					ap_log_rerror (APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(02594)
+					               "Resource «%s» not found on libzakautho configuration.", w);
+				}
+			else
+				{
+					if (zak_autho_is_allowed (autho, role_user, resource, FALSE))
+						{
+							return AUTHZ_GRANTED;
+						}
+				}
 		}
-	}
 
 	ap_log_rerror (APLOG_MARK, APLOG_DEBUG, 0, r, APLOGNO(01663)
 	               "access to %s failed, reason: user '%s' does not meet "
@@ -173,6 +279,7 @@ create_authz_zakautho_dir_config (apr_pool_t *p, char *d)
 	conf->db_table_name_prefix = NULL;
 	conf->role_name_prefix = NULL;
 	conf->resource_name_prefix = NULL;
+	conf->user_decoration = NULL;
 
 	return conf;
 }
