@@ -1,0 +1,21 @@
+From: Andrea Zagli <azagli@libero.it>
+Date: Sun, 3 Dec 2017 23:50:46 +0100
+Subject: autogen.sh: aclocal missing -I.
+
+---
+ autogen.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/autogen.sh b/autogen.sh
+index 07457a5..b350a2c 100755
+--- a/autogen.sh
++++ b/autogen.sh
+@@ -22,7 +22,7 @@ if [ "$#" = 0 -a "x$NOCONFIGURE" = "x" ]; then
+ fi
+ 
+ set -x
+-aclocal --install || exit 1
++aclocal -I m4 --install || exit 1
+ #glib-gettextize --force --copy || exit 1
+ #gtkdocize --copy || exit 1
+ #intltoolize --force --copy --automake || exit 1

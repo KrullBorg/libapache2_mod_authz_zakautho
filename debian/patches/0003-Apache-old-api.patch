@@ -1,0 +1,251 @@
+From: Andrea Zagli <azagli@libero.it>
+Date: Sun, 7 Jan 2018 11:24:43 +0100
+Subject: Apache old api.
+
+---
+ src/mod_authz_zakautho.c | 126 ++++++++++++++++++++---------------------------
+ 1 file changed, 54 insertions(+), 72 deletions(-)
+
+diff --git a/src/mod_authz_zakautho.c b/src/mod_authz_zakautho.c
+index 3599d84..57f6bea 100644
+--- a/src/mod_authz_zakautho.c
++++ b/src/mod_authz_zakautho.c
+@@ -19,7 +19,6 @@
+ #include "apr_strings.h"
+ 
+ #include "ap_config.h"
+-#include "ap_provider.h"
+ #include "httpd.h"
+ #include "http_config.h"
+ #include "http_core.h"
+@@ -27,8 +26,6 @@
+ #include "http_protocol.h"
+ #include "http_request.h"
+ 
+-#include "mod_auth.h"
+-
+ #ifdef HAVE_CONFIG_H
+ 	#include <config.h>
+ #endif
+@@ -94,14 +91,15 @@ module AP_DECLARE_DATA authz_zakautho_module =
+ 	register_hooks                   /* register hooks */
+ };
+ 
+-static authz_status
+-check_authorization (request_rec *r,
+-                     const char *require_args,
+-                     const void *parsed_require_args)
++static int
++check_authorization (request_rec *r)
+ {
+ 	const char *err = NULL;
+-	const ap_expr_info_t *expr = parsed_require_args;
+-	const char *require;
++
++	const apr_array_header_t *reqs_arr = ap_requires (r);
++	require_line *reqs;
++	int m = r->method_number;
++	register int x;
+ 
+ 	const char *t;
+ 	const char *w;
+@@ -121,26 +119,23 @@ check_authorization (request_rec *r,
+ 
+ 	if (!r->user)
+ 		{
+-			return AUTHZ_DENIED_NO_USER;
++			return DECLINED;
+ 		}
+ 
+-	require = ap_expr_str_exec (r, expr, &err);
+-	if (err)
++	if (!reqs_arr)
+ 		{
+-			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
+-			               "authz_zakautho authorize: require user: Can't "
+-			               "evaluate require expression: %s", err);
+-			return AUTHZ_DENIED;
++			return DECLINED;
+ 		}
++	reqs = (require_line *)reqs_arr->elts;
+ 
+ 	config = (zakautho_config *)ap_get_module_config (r->per_dir_config, &authz_zakautho_module);
+ 
+ 	autho = zak_autho_new ();
+ 	if (autho == NULL)
+ 		{
+-			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 			               "Unable to create the libzakautho object.");
+-			return AUTHZ_DENIED;
++			return DECLINED;
+ 		}
+ 
+ 	if (config->xml_filename != NULL)
+@@ -148,19 +143,19 @@ check_authorization (request_rec *r,
+ 			xdoc = xmlParseFile (config->xml_filename);
+ 			if (xdoc != NULL)
+ 				{
+-					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 					               "Unable to parse the libzakautho configuration from xml file «%s».",
+ 					               config->xml_filename);
+-					return AUTHZ_DENIED;
++					return DECLINED;
+ 				}
+ 
+ 			xnode = xmlDocGetRootElement (xdoc);
+ 			if (!zak_autho_load_from_xml (autho, xnode, TRUE))
+ 				{
+-					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 					               "Unable to load the libzakautho configuration from xml file «%s».",
+ 					               config->xml_filename);
+-					return AUTHZ_DENIED;
++					return DECLINED;
+ 				}
+ 		}
+ 	else if (config->db_cnc_string != NULL)
+@@ -169,36 +164,36 @@ check_authorization (request_rec *r,
+ 			gdacon = gda_connection_open_from_string (NULL, config->db_cnc_string, NULL, 0, &error);
+ 			if (gdacon == NULL || error != NULL)
+ 				{
+-					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 					               "Unable to create connection to db: %s.",
+ 					               error != NULL && error->message != NULL ? error->message : "no details");
+-					return AUTHZ_DENIED;
++					return DECLINED;
+ 				}
+ 
+ 			if (!zak_autho_load_from_db_with_monitor (autho, gdacon,
+ 			                                          config->db_table_name_prefix != NULL ? config->db_table_name_prefix : NULL,
+ 			                                          TRUE))
+ 				{
+-					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++					ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 					               "Unable to load the libzakautho configuration from db.");
+-					return AUTHZ_DENIED;
++					return DECLINED;
+ 				}
+ 		}
+ 	else
+ 		{
+-			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 			               "libzakautho configuration must be loaded from xml file or from database. "
+ 			               "Please use AuthZakAuthoXmlFilename or AuthZakAuthoDbCncString in apache configuration.");
+-			return AUTHZ_DENIED;
++			return DECLINED;
+ 		}
+ 
+ 	_user = g_strdup_printf (config->user_decoration != NULL ? config->user_decoration : "%s", r->user);
+ 	role_user = zak_autho_get_role_from_id (autho, _user);
+ 	if (role_user == NULL)
+ 		{
+-			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r, APLOGNO(02594)
++			ap_log_rerror (APLOG_MARK, APLOG_ERR, 0, r,
+ 			               "User «%s» not found on libzakautho configuration.", _user);
+-			return AUTHZ_DENIED;
++			return DECLINED;
+ 		}
+ 	g_free (_user);
+ 
+@@ -211,68 +206,55 @@ check_authorization (request_rec *r,
+ 			zak_autho_set_resource_name_prefix (autho, config->resource_name_prefix);
+ 		}
+ 
+-	t = require;
+-	while ((w = ap_getword_conf (r->pool, &t)) && w[0])
++	for (x = 0; x < reqs_arr->nelts; x++)
+ 		{
+-			ZakAuthoIResource *resource;
+-
+-			resource = zak_autho_get_resource_from_id (autho, w);
+-			if (resource == NULL)
++			if (!(reqs[x].method_mask & (AP_METHOD_BIT << m)))
+ 				{
+-					ap_log_rerror (APLOG_MARK, APLOG_WARNING, 0, r, APLOGNO(02594)
+-					               "Resource «%s» not found on libzakautho configuration.", w);
++					continue;
+ 				}
+-			else
++
++			t = reqs[x].requirement;
++			w = ap_getword_white (r->pool, &t);
++
++			if (!strcasecmp (w, "zakautho"))
+ 				{
+-					if (zak_autho_is_allowed (autho, role_user, resource, FALSE))
++					while (t[0])
+ 						{
+-							return AUTHZ_GRANTED;
++							ZakAuthoIResource *resource;
++
++							w = ap_getword_conf (r->pool, &t);
++
++							resource = zak_autho_get_resource_from_id (autho, w);
++							if (resource == NULL)
++								{
++									ap_log_rerror (APLOG_MARK, APLOG_WARNING, 0, r,
++									               "Resource «%s» not found on libzakautho configuration.", w);
++								}
++							else
++								{
++									if (zak_autho_is_allowed (autho, role_user, resource, FALSE))
++										{
++											return OK;
++										}
++								}
+ 						}
+ 				}
+ 		}
+ 
+-	ap_log_rerror (APLOG_MARK, APLOG_DEBUG, 0, r, APLOGNO(01663)
++	ap_log_rerror (APLOG_MARK, APLOG_DEBUG, 0, r,
+ 	               "access to %s failed, reason: user '%s' does not meet "
+ 	               "'require'ments for user to be allowed access",
+ 	               r->uri, r->user);
+ 
+-	return AUTHZ_DENIED;
++	return HTTP_UNAUTHORIZED;
+ }
+ 
+-static const char
+-*parse_config (cmd_parms *cmd, const char *require_line,
+-               const void **parsed_require_line)
+-{
+-	const char *expr_err = NULL;
+-	ap_expr_info_t *expr;
+-
+-	expr = ap_expr_parse_cmd(cmd, require_line, AP_EXPR_FLAG_STRING_RESULT,
+-	                         &expr_err, NULL);
+-
+-	if (expr_err)
+-		return apr_pstrcat(cmd->temp_pool,
+-		                   "Cannot parse expression in require line: ",
+-		                   expr_err, NULL);
+-
+-	*parsed_require_line = expr;
+-
+-	return NULL;
+-}
+-
+-static const authz_provider authz_zakautho_provider =
+-	{
+-		&check_authorization,
+-		&parse_config,
+-	};
+-
+ static void
+ register_hooks (apr_pool_t *pool)
+ {
+ 	g_type_init ();
+ 
+-	ap_register_auth_provider (pool, AUTHZ_PROVIDER_GROUP, "zakautho",
+-	                           AUTHZ_PROVIDER_VERSION,
+-	                           &authz_zakautho_provider, AP_AUTH_INTERNAL_PER_CONF);
++	ap_hook_auth_checker (check_authorization, NULL, NULL, APR_HOOK_MIDDLE);
+ }
+ 
+ /*

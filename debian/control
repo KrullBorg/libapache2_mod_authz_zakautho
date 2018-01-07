@@ -1,0 +1,15 @@
+Source: libapache2-mod-authz-zakautho
+Priority: optional
+Maintainer: Andrea Zagli <azagli@libero.it>
+Build-Depends: debhelper (>= 9), intltool, pkg-config, libzakautho-dev, apache2-prefork-dev
+Standards-Version: 3.9.8
+Section: web
+Homepage: http://saetta.ns0.it
+#Vcs-Git: https://anonscm.debian.org/collab-maint/libapache2_mod_authz_zakautho.git
+#Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/libapache2_mod_authz_zakautho.git
+
+Package: libapache2-mod-authz-zakautho
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libzakautho
+Description: Provider for apache2 basic authorization to interface with libzakautho
+ Provider for apache2 basic authorization to interface with libzakautho.
