@@ -1,0 +1,11 @@
+libapache2-mod-authz-zakautho (0.0.1-1~1.gbp8c809d) UNRELEASED; urgency=medium
+
+  ** SNAPSHOT build @8c809df1dfb0a732693f1d751901517239aa26c5 **
+
+  [ Andrea Zagli ]
+  ** SNAPSHOT build @99cea452a9bc102436b3195e6241e49ee956cc8d **
+
+  * Implemented basic authentication.
+  * Mandatory configuration parameters.
+
+ -- tux <tux@develop64.example.tst>  Sun, 07 Jan 2018 10:08:21 +0100
