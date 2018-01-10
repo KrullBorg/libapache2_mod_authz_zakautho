@@ -249,3 +249,15 @@ index 3599d84..57f6bea 100644
  }
  
  /*
+diff --git a/src/mod_authz_zakautho.c b/src/mod_authz_zakautho.c
+index 57f6bea..72c06cc 100644
+--- a/src/mod_authz_zakautho.c
++++ b/src/mod_authz_zakautho.c
+@@ -246,6 +246,8 @@ check_authorization (request_rec *r)
+ 	               "'require'ments for user to be allowed access",
+ 	               r->uri, r->user);
+ 
++	ap_note_auth_failure (r);
++
+ 	return HTTP_UNAUTHORIZED;
+ }

@@ -1,11 +1,12 @@
-libapache2-mod-authz-zakautho (0.0.1-1~6.gbp6ad437) UNRELEASED; urgency=medium
+libapache2-mod-authz-zakautho (0.0.1-1~7.gbpb18949) UNRELEASED; urgency=medium
 
-  ** SNAPSHOT build @6ad437d13fa4616358e7605bea6535d19042e557 **
+  ** SNAPSHOT build @b18949a80d4365ad35629373d62f03733d1c3e2e **
 
   [ Andrea Zagli ]
   ** SNAPSHOT build @99cea452a9bc102436b3195e6241e49ee956cc8d **
 
   * Mandatory configuration parameters.
   * Debian pkg: added files.
+  * Debian pkg: added files.
 
- -- tux <tux@develop64.example.tst>  Thu, 11 Jan 2018 11:51:33 +0100
+ -- tux <tux@develop64.example.tst>  Thu, 11 Jan 2018 12:10:06 +0100
